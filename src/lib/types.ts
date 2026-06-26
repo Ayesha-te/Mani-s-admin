@@ -1,7 +1,14 @@
+export type DesignImage = {
+  url: string;
+  color?: string;
+};
+
 export type CategoryDesign = {
   id?: string;
   title: string;
   image?: string;
+  images?: DesignImage[];
+  colors?: string[];
   price: number;
   description?: string;
   featured: boolean;
