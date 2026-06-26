@@ -8,6 +8,23 @@ function dedupeStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
+function mergeEditableColors(colors: string[] | undefined, imageColors: string[]) {
+  const nextColors = (colors ?? []).map((color) => color ?? "");
+  const knownColors = new Set(nextColors.map((color) => color.trim()).filter(Boolean));
+
+  imageColors.forEach((color) => {
+    const trimmedColor = color.trim();
+    if (!trimmedColor || knownColors.has(trimmedColor)) {
+      return;
+    }
+
+    nextColors.push(trimmedColor);
+    knownColors.add(trimmedColor);
+  });
+
+  return nextColors.length > 0 ? nextColors : [""];
+}
+
 function normalizeDesign(product: CategoryDesign): CategoryDesign {
   const images = (product.images && product.images.length > 0
     ? product.images
@@ -20,7 +37,7 @@ function normalizeDesign(product: CategoryDesign): CategoryDesign {
     }))
     .filter((image) => image.url);
 
-  const colors = dedupeStrings([...(product.colors ?? []), ...images.map((image) => image.color ?? "")]);
+  const colors = mergeEditableColors(product.colors, images.map((image) => image.color ?? ""));
 
   return {
     ...createEmptyDesign(),
@@ -218,42 +235,6 @@ export function CategoriesPage({
     }
   };
 
-  const handleReplaceDesignImage = async (index: number, file: File | null) => {
-    if (!file) {
-      return;
-    }
-
-    setError(null);
-    setIsUploadingImages(true);
-
-    try {
-      const image = await fileToDataUrl(file);
-      setForm((current) => ({
-        ...current,
-        products: current.products.map((product, productIndex) => {
-          if (productIndex !== index) {
-            return product;
-          }
-
-          const normalizedProduct = normalizeDesign(product);
-          const nextImages = normalizedProduct.images && normalizedProduct.images.length > 0
-            ? normalizedProduct.images.map((imageItem, imageIndex) => (imageIndex === 0 ? { ...imageItem, url: image } : imageItem))
-            : [{ url: image, color: "" }];
-
-          return {
-            ...normalizedProduct,
-            image,
-            images: nextImages,
-          };
-        }),
-      }));
-    } catch (uploadError) {
-      setError(getErrorMessage(uploadError));
-    } finally {
-      setIsUploadingImages(false);
-    }
-  };
-
   const handleDesignChange = <K extends keyof CategoryDesign>(index: number, key: K, value: CategoryDesign[K]) => {
     setForm((current) => ({
       ...current,
@@ -401,13 +382,16 @@ export function CategoriesPage({
         const existingColors = [...(normalizedProduct.colors ?? [])];
         const previousColor = existingColors[colorIndex] ?? "";
         existingColors[colorIndex] = value;
+        const previousTrimmedColor = previousColor.trim();
 
         return {
           ...normalizedProduct,
           colors: existingColors,
-          images: (normalizedProduct.images ?? []).map((imageItem) => (
-            imageItem.color === previousColor ? { ...imageItem, color: value.trim() } : imageItem
-          )),
+          images: previousTrimmedColor
+            ? (normalizedProduct.images ?? []).map((imageItem) => (
+              imageItem.color?.trim() === previousTrimmedColor ? { ...imageItem, color: value.trim() } : imageItem
+            ))
+            : normalizedProduct.images ?? [],
         };
       }),
     }));
@@ -425,13 +409,16 @@ export function CategoriesPage({
         const existingColors = [...(normalizedProduct.colors ?? [])];
         const removedColor = existingColors[colorIndex] ?? "";
         const nextColors = existingColors.filter((_, currentColorIndex) => currentColorIndex !== colorIndex);
+        const removedTrimmedColor = removedColor.trim();
 
         return {
           ...normalizedProduct,
-          colors: nextColors,
-          images: (normalizedProduct.images ?? []).map((imageItem) => (
-            imageItem.color === removedColor ? { ...imageItem, color: "" } : imageItem
-          )),
+          colors: nextColors.length > 0 ? nextColors : [""],
+          images: removedTrimmedColor
+            ? (normalizedProduct.images ?? []).map((imageItem) => (
+              imageItem.color?.trim() === removedTrimmedColor ? { ...imageItem, color: "" } : imageItem
+            ))
+            : normalizedProduct.images ?? [],
         };
       }),
     }));
@@ -511,6 +498,8 @@ export function CategoriesPage({
               <div style={{ display: "grid", gap: "1rem" }}>
                 {form.products.map((product, index) => {
                   const normalizedProduct = normalizeDesign(product);
+                  const colorInputs = normalizedProduct.colors ?? [""];
+                  const colorOptions = dedupeStrings(colorInputs);
 
                   return (
                     <div key={product.id ?? `design-${index}`} className="card padding-lg">
@@ -526,58 +515,83 @@ export function CategoriesPage({
 
                       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 180px) minmax(0, 1fr)" }}>
                         <div>
-                          <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "16px", overflow: "hidden", background: "rgba(15, 23, 42, 0.08)", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
-                            {normalizedProduct.image ? (
-                              <img src={normalizedProduct.image} alt={product.title || `Design ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                            ) : (
-                              <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#64748b" }}>
+                          <div className="section-row" style={{ alignItems: "center", marginBottom: "0.75rem" }}>
+                            <div>
+                              <p className="section-subtitle" style={{ margin: 0 }}>Design photos</p>
+                              <p className="section-subtitle" style={{ margin: "0.35rem 0 0" }}>
+                                Each photo can be linked to a color. The first photo is used as the main cover.
+                              </p>
+                            </div>
+                            <label className="button secondary" style={{ padding: "0.6rem 0.9rem", fontSize: "0.92rem" }}>
+                              <Plus />
+                              Add photos
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                style={{ display: "none" }}
+                                onChange={(event) => void handleAddDesignGalleryImages(index, event.target.files)}
+                              />
+                            </label>
+                          </div>
+
+                          {(normalizedProduct.images ?? []).length > 0 ? (
+                            <div style={{ display: "grid", gap: "0.75rem" }}>
+                              {(normalizedProduct.images ?? []).map((imageItem, imageIndex) => (
+                                <div key={`${product.id ?? `design-${index}`}-image-${imageIndex}`} className="card" style={{ padding: "0.75rem" }}>
+                                  <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "92px minmax(0, 1fr)" }}>
+                                    <div style={{ width: "92px", height: "92px", borderRadius: "12px", overflow: "hidden", background: "rgba(15, 23, 42, 0.08)", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
+                                      <img src={imageItem.url} alt={`${product.title || `Design ${index + 1}`} ${imageIndex + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    </div>
+
+                                    <div style={{ display: "grid", gap: "0.6rem" }}>
+                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                                        <p className="section-subtitle" style={{ margin: 0 }}>
+                                          {imageIndex === 0 ? "Main photo" : `Photo ${imageIndex + 1}`}
+                                        </p>
+                                        {imageIndex === 0 ? <span className="badge">Primary</span> : null}
+                                      </div>
+
+                                      <label>
+                                        Bind photo to color
+                                        <select className="select" value={imageItem.color ?? ""} onChange={(event) => handleDesignImageBindingChange(index, imageIndex, event.target.value)}>
+                                          <option value="">No color binding</option>
+                                          {colorOptions.map((color) => (
+                                            <option key={`${product.id ?? `design-${index}`}-${color}`} value={color}>
+                                              {color}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+
+                                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                                        <label className="button secondary" style={{ padding: "0.55rem 0.85rem", fontSize: "0.9rem" }}>
+                                          Replace
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: "none" }}
+                                            onChange={(event) => void handleReplaceDesignGalleryImage(index, imageIndex, event.target.files?.[0] ?? null)}
+                                          />
+                                        </label>
+                                        <button className="button secondary" type="button" style={{ padding: "0.55rem 0.85rem", fontSize: "0.9rem" }} onClick={() => handleRemoveDesignGalleryImage(index, imageIndex)}>
+                                          <Trash2 />
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "16px", display: "grid", placeItems: "center", background: "rgba(15, 23, 42, 0.04)", border: "1px dashed rgba(148, 163, 184, 0.4)", color: "#64748b", textAlign: "center", padding: "1rem" }}>
+                              <div>
                                 <ImagePlus />
+                                <p className="section-subtitle" style={{ margin: "0.75rem 0 0" }}>No photos added yet</p>
                               </div>
-                            )}
-                          </div>
-
-                          <label style={{ display: "block", marginTop: "0.75rem" }}>
-                            Replace cover image
-                            <input className="input" type="file" accept="image/*" onChange={(event) => void handleReplaceDesignImage(index, event.target.files?.[0] ?? null)} />
-                          </label>
-
-                          <label style={{ display: "block", marginTop: "0.75rem" }}>
-                            Add more design photos
-                            <input className="input" type="file" accept="image/*" multiple onChange={(event) => void handleAddDesignGalleryImages(index, event.target.files)} />
-                          </label>
-
-                          <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
-                            {(normalizedProduct.images ?? []).map((imageItem, imageIndex) => (
-                              <div key={`${product.id ?? `design-${index}`}-image-${imageIndex}`} className="card" style={{ padding: "0.75rem" }}>
-                                <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "12px", overflow: "hidden", background: "rgba(15, 23, 42, 0.08)", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
-                                  <img src={imageItem.url} alt={`${product.title || `Design ${index + 1}`} ${imageIndex + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                </div>
-
-                                <label style={{ display: "block", marginTop: "0.75rem" }}>
-                                  Bind this photo to a color
-                                  <select className="select" value={imageItem.color ?? ""} onChange={(event) => handleDesignImageBindingChange(index, imageIndex, event.target.value)}>
-                                    <option value="">No color binding</option>
-                                    {(normalizedProduct.colors ?? []).filter(Boolean).map((color) => (
-                                      <option key={`${product.id ?? `design-${index}`}-${color}`} value={color}>
-                                        {color}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-
-                                <div style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}>
-                                  <label>
-                                    Replace this photo
-                                    <input className="input" type="file" accept="image/*" onChange={(event) => void handleReplaceDesignGalleryImage(index, imageIndex, event.target.files?.[0] ?? null)} />
-                                  </label>
-                                  <button className="button secondary" type="button" onClick={() => handleRemoveDesignGalleryImage(index, imageIndex)}>
-                                    <Trash2 />
-                                    Remove photo
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className="form-row">
@@ -596,7 +610,7 @@ export function CategoriesPage({
                               <div>
                                 <p className="section-subtitle" style={{ margin: 0 }}>Colors</p>
                                 <p className="section-subtitle" style={{ margin: "0.35rem 0 0" }}>
-                                  Add color names like Gold, Silver, Green, or Maroon.
+                                  Add color names like Gold, Silver, Green, or Maroon. These will appear on the website.
                                 </p>
                               </div>
                               <button className="button secondary" type="button" onClick={() => handleAddDesignColor(index)}>
@@ -606,7 +620,7 @@ export function CategoriesPage({
                             </div>
 
                             <div style={{ display: "grid", gap: "0.75rem" }}>
-                              {(normalizedProduct.colors ?? []).map((color, colorIndex) => (
+                              {colorInputs.map((color, colorIndex) => (
                                 <div key={`${product.id ?? `design-${index}`}-color-${colorIndex}`} style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "minmax(0, 1fr) auto" }}>
                                   <input
                                     className="input"
@@ -614,17 +628,13 @@ export function CategoriesPage({
                                     placeholder={`Color ${colorIndex + 1}`}
                                     onChange={(event) => handleDesignColorChange(index, colorIndex, event.target.value)}
                                   />
-                                  <button className="button secondary" type="button" onClick={() => handleRemoveDesignColor(index, colorIndex)}>
-                                    <Trash2 />
-                                  </button>
+                                  {colorInputs.length > 1 || color.trim() ? (
+                                    <button className="button secondary" type="button" onClick={() => handleRemoveDesignColor(index, colorIndex)}>
+                                      <Trash2 />
+                                    </button>
+                                  ) : <div />}
                                 </div>
                               ))}
-
-                              {(normalizedProduct.colors ?? []).length === 0 ? (
-                                <p className="section-subtitle" style={{ margin: 0 }}>
-                                  No colors added yet. You can still upload photos first and bind them later.
-                                </p>
-                              ) : null}
                             </div>
                           </div>
 
