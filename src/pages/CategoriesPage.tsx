@@ -500,29 +500,42 @@ export function CategoriesPage({
                   const normalizedProduct = normalizeDesign(product);
                   const colorInputs = normalizedProduct.colors ?? [""];
                   const colorOptions = dedupeStrings(colorInputs);
+                  const imageCount = (normalizedProduct.images ?? []).length;
+                  const designHeading = product.title?.trim() || `Untitled design ${index + 1}`;
 
                   return (
-                    <div key={product.id ?? `design-${index}`} className="card padding-lg">
-                      <div className="section-row" style={{ alignItems: "flex-start" }}>
-                        <div>
-                          <p className="section-subtitle">Design {index + 1}</p>
-                          <p className="section-subtitle">This will appear on the website inside the category page.</p>
+                    <div key={product.id ?? `design-${index}`} className="design-editor card padding-lg">
+                      <div className="design-editor-header">
+                        <div className="design-editor-heading">
+                          <p className="design-editor-kicker">Design {index + 1}</p>
+                          <h3 className="design-editor-title">{designHeading}</h3>
+                          <p className="design-editor-copy">Edit the photos, color options, pricing, and storefront details for this design.</p>
                         </div>
-                        <button className="button secondary" type="button" onClick={() => handleRemoveDesign(index)}>
-                          <Trash2 />
-                        </button>
+
+                        <div className="design-editor-actions">
+                          {imageCount > 0 ? (
+                            <span className="badge design-badge-muted">{imageCount} photo{imageCount === 1 ? "" : "s"}</span>
+                          ) : null}
+                          {colorOptions.length > 0 ? (
+                            <span className="badge design-badge-muted">{colorOptions.length} color{colorOptions.length === 1 ? "" : "s"}</span>
+                          ) : null}
+                          <button className="button secondary button-compact" type="button" onClick={() => handleRemoveDesign(index)}>
+                            <Trash2 />
+                            Remove
+                          </button>
+                        </div>
                       </div>
 
-                      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 180px) minmax(0, 1fr)" }}>
-                        <div>
-                          <div className="section-row" style={{ alignItems: "center", marginBottom: "0.75rem" }}>
+                      <div className="design-editor-body">
+                        <div className="design-photo-panel">
+                          <div className="design-panel-header">
                             <div>
-                              <p className="section-subtitle" style={{ margin: 0 }}>Design photos</p>
-                              <p className="section-subtitle" style={{ margin: "0.35rem 0 0" }}>
-                                Each photo can be linked to a color. The first photo is used as the main cover.
+                              <p className="design-panel-title">Design photos</p>
+                              <p className="design-panel-copy">
+                                Upload multiple photos and bind any of them to a color. The first photo becomes the main cover on the website.
                               </p>
                             </div>
-                            <label className="button secondary" style={{ padding: "0.6rem 0.9rem", fontSize: "0.92rem" }}>
+                            <label className="button secondary button-compact">
                               <Plus />
                               Add photos
                               <input
@@ -536,122 +549,152 @@ export function CategoriesPage({
                           </div>
 
                           {(normalizedProduct.images ?? []).length > 0 ? (
-                            <div style={{ display: "grid", gap: "0.75rem" }}>
+                            <div className="design-photo-list">
                               {(normalizedProduct.images ?? []).map((imageItem, imageIndex) => (
-                                <div key={`${product.id ?? `design-${index}`}-image-${imageIndex}`} className="card" style={{ padding: "0.75rem" }}>
-                                  <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "92px minmax(0, 1fr)" }}>
-                                    <div style={{ width: "92px", height: "92px", borderRadius: "12px", overflow: "hidden", background: "rgba(15, 23, 42, 0.08)", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
-                                      <img src={imageItem.url} alt={`${product.title || `Design ${index + 1}`} ${imageIndex + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                <div key={`${product.id ?? `design-${index}`}-image-${imageIndex}`} className="design-photo-card">
+                                  <div className="design-photo-thumb-wrap">
+                                    <img
+                                      src={imageItem.url}
+                                      alt={`${product.title || `Design ${index + 1}`} ${imageIndex + 1}`}
+                                      className="design-photo-thumb"
+                                    />
+                                    {imageIndex === 0 ? <span className="badge design-photo-badge">Primary</span> : null}
+                                  </div>
+
+                                  <div className="design-photo-content">
+                                    <div className="design-photo-heading">
+                                      <div>
+                                        <p className="design-photo-title">{imageIndex === 0 ? "Cover photo" : `Photo ${imageIndex + 1}`}</p>
+                                        <p className="design-photo-caption">
+                                          {imageItem.color?.trim() ? `Bound to ${imageItem.color}` : "No color linked yet"}
+                                        </p>
+                                      </div>
                                     </div>
 
-                                    <div style={{ display: "grid", gap: "0.6rem" }}>
-                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-                                        <p className="section-subtitle" style={{ margin: 0 }}>
-                                          {imageIndex === 0 ? "Main photo" : `Photo ${imageIndex + 1}`}
-                                        </p>
-                                        {imageIndex === 0 ? <span className="badge">Primary</span> : null}
-                                      </div>
+                                    <label className="design-photo-field">
+                                      Bind photo to color
+                                      <select className="select" value={imageItem.color ?? ""} onChange={(event) => handleDesignImageBindingChange(index, imageIndex, event.target.value)}>
+                                        <option value="">No color binding</option>
+                                        {colorOptions.map((color) => (
+                                          <option key={`${product.id ?? `design-${index}`}-${color}`} value={color}>
+                                            {color}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
 
-                                      <label>
-                                        Bind photo to color
-                                        <select className="select" value={imageItem.color ?? ""} onChange={(event) => handleDesignImageBindingChange(index, imageIndex, event.target.value)}>
-                                          <option value="">No color binding</option>
-                                          {colorOptions.map((color) => (
-                                            <option key={`${product.id ?? `design-${index}`}-${color}`} value={color}>
-                                              {color}
-                                            </option>
-                                          ))}
-                                        </select>
+                                    <div className="design-photo-actions">
+                                      <label className="button secondary button-compact">
+                                        Replace
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          style={{ display: "none" }}
+                                          onChange={(event) => void handleReplaceDesignGalleryImage(index, imageIndex, event.target.files?.[0] ?? null)}
+                                        />
                                       </label>
-
-                                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                                        <label className="button secondary" style={{ padding: "0.55rem 0.85rem", fontSize: "0.9rem" }}>
-                                          Replace
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            style={{ display: "none" }}
-                                            onChange={(event) => void handleReplaceDesignGalleryImage(index, imageIndex, event.target.files?.[0] ?? null)}
-                                          />
-                                        </label>
-                                        <button className="button secondary" type="button" style={{ padding: "0.55rem 0.85rem", fontSize: "0.9rem" }} onClick={() => handleRemoveDesignGalleryImage(index, imageIndex)}>
-                                          <Trash2 />
-                                          Remove
-                                        </button>
-                                      </div>
+                                      <button className="button secondary button-compact" type="button" onClick={() => handleRemoveDesignGalleryImage(index, imageIndex)}>
+                                        <Trash2 />
+                                        Remove
+                                      </button>
                                     </div>
                                   </div>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "16px", display: "grid", placeItems: "center", background: "rgba(15, 23, 42, 0.04)", border: "1px dashed rgba(148, 163, 184, 0.4)", color: "#64748b", textAlign: "center", padding: "1rem" }}>
+                            <div className="design-photo-empty">
                               <div>
                                 <ImagePlus />
-                                <p className="section-subtitle" style={{ margin: "0.75rem 0 0" }}>No photos added yet</p>
+                                <p className="design-photo-empty-title">No photos added yet</p>
+                                <p className="design-photo-empty-copy">Use the add photos button to upload the first image for this design.</p>
                               </div>
                             </div>
                           )}
                         </div>
 
-                        <div className="form-row">
-                          <label>
-                            Design name
-                            <input className="input" value={product.title} onChange={(event) => handleDesignChange(index, "title", event.target.value)} required />
-                          </label>
+                        <div className="design-detail-panel">
+                          <div className="design-field-grid">
+                            <label className="field-span-2">
+                              Design name
+                              <input className="input" value={product.title} onChange={(event) => handleDesignChange(index, "title", event.target.value)} required />
+                            </label>
 
-                          <label>
-                            Price
-                            <input className="input" type="number" min={1} value={product.price} onChange={(event) => handleDesignChange(index, "price", Number(event.target.value))} required />
-                          </label>
+                            <label>
+                              Price
+                              <input className="input" type="number" min={1} value={product.price} onChange={(event) => handleDesignChange(index, "price", Number(event.target.value))} required />
+                            </label>
 
-                          <div className="card" style={{ padding: "1rem", borderRadius: "16px" }}>
-                            <div className="section-row" style={{ marginBottom: "0.75rem" }}>
-                              <div>
-                                <p className="section-subtitle" style={{ margin: 0 }}>Colors</p>
-                                <p className="section-subtitle" style={{ margin: "0.35rem 0 0" }}>
-                                  Add color names like Gold, Silver, Green, or Maroon. These will appear on the website.
-                                </p>
+                            <div className="design-summary-card">
+                              <span className="design-summary-label">Storefront setup</span>
+                              <div className="design-summary-values">
+                                <div>
+                                  <strong>{imageCount}</strong>
+                                  <span>photo{imageCount === 1 ? "" : "s"}</span>
+                                </div>
+                                <div>
+                                  <strong>{colorOptions.length}</strong>
+                                  <span>color{colorOptions.length === 1 ? "" : "s"}</span>
+                                </div>
                               </div>
-                              <button className="button secondary" type="button" onClick={() => handleAddDesignColor(index)}>
-                                <Plus />
-                                Add color
-                              </button>
                             </div>
 
-                            <div style={{ display: "grid", gap: "0.75rem" }}>
-                              {colorInputs.map((color, colorIndex) => (
-                                <div key={`${product.id ?? `design-${index}`}-color-${colorIndex}`} style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "minmax(0, 1fr) auto" }}>
-                                  <input
-                                    className="input"
-                                    value={color}
-                                    placeholder={`Color ${colorIndex + 1}`}
-                                    onChange={(event) => handleDesignColorChange(index, colorIndex, event.target.value)}
-                                  />
-                                  {colorInputs.length > 1 || color.trim() ? (
-                                    <button className="button secondary" type="button" onClick={() => handleRemoveDesignColor(index, colorIndex)}>
-                                      <Trash2 />
-                                    </button>
-                                  ) : <div />}
+                            <div className="card design-colors-card field-span-2">
+                              <div className="design-panel-header design-panel-header-tight">
+                                <div>
+                                  <p className="design-panel-title">Colors</p>
+                                  <p className="design-panel-copy">
+                                    Add names like Gold, Silver, Green, or Maroon. These will appear as selectable options on the website.
+                                  </p>
                                 </div>
-                              ))}
+                                <button className="button secondary button-compact" type="button" onClick={() => handleAddDesignColor(index)}>
+                                  <Plus />
+                                  Add color
+                                </button>
+                              </div>
+
+                              <div className="design-color-list">
+                                {colorInputs.map((color, colorIndex) => (
+                                  <div key={`${product.id ?? `design-${index}`}-color-${colorIndex}`} className="design-color-row">
+                                    <input
+                                      className="input"
+                                      value={color}
+                                      placeholder={`Color ${colorIndex + 1}`}
+                                      onChange={(event) => handleDesignColorChange(index, colorIndex, event.target.value)}
+                                    />
+                                    {colorInputs.length > 1 || color.trim() ? (
+                                      <button className="button secondary button-icon" type="button" onClick={() => handleRemoveDesignColor(index, colorIndex)} aria-label={`Remove color ${colorIndex + 1}`}>
+                                        <Trash2 />
+                                      </button>
+                                    ) : <div />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <label className="field-span-2">
+                              Design description
+                              <textarea className="textarea" value={normalizedProduct.description ?? ""} onChange={(event) => handleDesignChange(index, "description", event.target.value)} rows={5} />
+                            </label>
+
+                            <div className="design-toggle-grid field-span-2">
+                              <label className={product.featured ? "design-toggle design-toggle-active" : "design-toggle"}>
+                                <input type="checkbox" checked={product.featured} onChange={(event) => handleDesignChange(index, "featured", event.target.checked)} />
+                                <div>
+                                  <span className="design-toggle-title">Featured product</span>
+                                  <span className="design-toggle-copy">Show this design in the featured section.</span>
+                                </div>
+                              </label>
+
+                              <label className={product.hotSelling ? "design-toggle design-toggle-active" : "design-toggle"}>
+                                <input type="checkbox" checked={product.hotSelling} onChange={(event) => handleDesignChange(index, "hotSelling", event.target.checked)} />
+                                <div>
+                                  <span className="design-toggle-title">Hot selling product</span>
+                                  <span className="design-toggle-copy">Highlight this design in the hot selling section.</span>
+                                </div>
+                              </label>
                             </div>
                           </div>
-
-                          <label>
-                            Design description
-                            <textarea className="textarea" value={normalizedProduct.description ?? ""} onChange={(event) => handleDesignChange(index, "description", event.target.value)} rows={4} />
-                          </label>
-
-                          <label style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                            <input type="checkbox" checked={product.featured} onChange={(event) => handleDesignChange(index, "featured", event.target.checked)} />
-                            Mark as featured
-                          </label>
-
-                          <label style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                            <input type="checkbox" checked={product.hotSelling} onChange={(event) => handleDesignChange(index, "hotSelling", event.target.checked)} />
-                            Mark as hot selling
-                          </label>
                         </div>
                       </div>
                     </div>
