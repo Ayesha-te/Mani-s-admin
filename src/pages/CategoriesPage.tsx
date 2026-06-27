@@ -128,7 +128,7 @@ export function CategoriesPage({
         };
       });
 
-      await onSave(
+      const savedCategory = await onSave(
         {
           name: form.name,
           slug: "",
@@ -141,8 +141,18 @@ export function CategoriesPage({
         editSlug ?? undefined,
       );
 
-      setForm(createEmptyForm());
-      setEditSlug(null);
+      if (editSlug) {
+        setForm({
+          name: savedCategory.name,
+          description: savedCategory.description,
+          image: savedCategory.image || "",
+          products: createLegacyDesigns(savedCategory),
+        });
+        setEditSlug(savedCategory.slug);
+      } else {
+        setForm(createEmptyForm());
+        setEditSlug(null);
+      }
     } catch (submissionError) {
       setError(getErrorMessage(submissionError));
     } finally {
@@ -230,7 +240,7 @@ export function CategoriesPage({
 
       setForm((current) => ({
         ...current,
-        products: [...current.products, ...newDesigns],
+        products: [...newDesigns, ...current.products],
       }));
     } catch (uploadError) {
       setError(getErrorMessage(uploadError));
@@ -431,7 +441,7 @@ export function CategoriesPage({
   const handleAddEmptyDesign = () => {
     setForm((current) => ({
       ...current,
-      products: [...current.products, createEmptyDesign()],
+      products: [createEmptyDesign(), ...current.products],
     }));
   };
 
@@ -529,6 +539,9 @@ export function CategoriesPage({
                           {discountPercent > 0 ? (
                             <span className="badge">{discountPercent}% off</span>
                           ) : null}
+                          <button className="button button-compact" type="submit" disabled={isSubmitting || isUploadingImages}>
+                            {isSubmitting ? "Saving..." : "Save category"}
+                          </button>
                           <button className="button secondary button-compact" type="button" onClick={() => handleRemoveDesign(index)}>
                             <Trash2 />
                             Remove
