@@ -130,7 +130,7 @@ export function OrdersPage({
                           <td>{item.quantity}</td>
                           <td>{formatMoney(item.unitPrice)}</td>
                           <td>{formatMoney(item.deliveryCharge)}</td>
-                          <td>{formatMoney(item.unitPrice * item.quantity + item.deliveryCharge * item.quantity)}</td>
+                          <td>{formatMoney(item.unitPrice * item.quantity + item.deliveryCharge)}</td>
                         </tr>
                       ))}
                     </tbody>
