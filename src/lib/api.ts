@@ -10,7 +10,8 @@ export class ApiError extends Error {
   }
 }
 
-export const API_BASE_URL =  "https://jewel-backend-five.vercel.app/api";
+const DEFAULT_API_BASE_URL = "https://jewel-backend-five.vercel.app/api";
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
 const TOKEN_STORAGE_KEY = "mani-admin-token";
 
 async function parseResponse<T>(response: Response): Promise<T> {
