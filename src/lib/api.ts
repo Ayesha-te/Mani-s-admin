@@ -1,4 +1,4 @@
-import type { AdminUser, Category, FeaturedItem, HotSellingItem, Product, SiteSettings } from "@/lib/types";
+import type { AdminUser, Category, FeaturedItem, HotSellingItem, Order, OrderStatus, Product, SiteSettings } from "@/lib/types";
 
 export class ApiError extends Error {
   status: number;
@@ -41,6 +41,20 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   });
 
   return parseResponse<T>(response);
+}
+
+async function requestBlob(path: string, token: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    await parseResponse(response);
+  }
+
+  return response.blob();
 }
 
 export function getErrorMessage(error: unknown) {
@@ -93,6 +107,18 @@ export const adminApi = {
   },
   getProducts(token: string) {
     return request<{ items: Product[] }>("/admin/products", {}, token);
+  },
+  getOrders(token: string) {
+    return request<{ items: Order[] }>("/admin/orders", {}, token);
+  },
+  updateOrderStatus(token: string, id: string, status: OrderStatus) {
+    return request<Order>(`/admin/orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }, token);
+  },
+  downloadOrderPdf(token: string, id: string) {
+    return requestBlob(`/admin/orders/${id}/pdf`, token);
   },
   createProduct(token: string, payload: Product) {
     return request<Product>("/admin/products", {

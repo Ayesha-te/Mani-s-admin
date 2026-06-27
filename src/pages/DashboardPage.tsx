@@ -1,6 +1,6 @@
-import { BarChart3, Box, Sparkles, Star } from "lucide-react";
+import { BarChart3, Box, PackageCheck, Sparkles, Star } from "lucide-react";
 
-export function DashboardPage({ summary }: { summary: { categories: number; products: number; featured: number; hotSelling: number } }) {
+export function DashboardPage({ summary }: { summary: { categories: number; products: number; orders: number; featured: number; hotSelling: number } }) {
   return (
     <div className="container">
       <section className="card padding-xl">
@@ -23,6 +23,15 @@ export function DashboardPage({ summary }: { summary: { categories: number; prod
             <div>
               <p className="stat-label">Designs</p>
               <p className="stat-value">{summary.products}</p>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon bg-green-100 text-green-800">
+              <PackageCheck />
+            </div>
+            <div>
+              <p className="stat-label">Orders</p>
+              <p className="stat-value">{summary.orders}</p>
             </div>
           </div>
           <div className="stat-card">

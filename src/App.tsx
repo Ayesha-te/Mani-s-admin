@@ -1,28 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { Home, List, Settings, Sparkles, Star } from "lucide-react";
+import { Home, List, PackageCheck, Settings, Sparkles, Star } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { adminApi, getErrorMessage, tokenStorage } from "@/lib/api";
-import { emptySiteSettings, type AdminUser, type Category, type FeaturedItem, type HotSellingItem, type Product, type SiteSettings } from "@/lib/types";
+import { emptySiteSettings, type AdminUser, type Category, type FeaturedItem, type HotSellingItem, type Order, type OrderStatus, type Product, type SiteSettings } from "@/lib/types";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 import { FeaturedPage } from "@/pages/FeaturedPage";
 import { HotSellingPage } from "@/pages/HotSellingPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { OrdersPage } from "@/pages/OrdersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: Home },
   { path: "/categories", label: "Categories", icon: List },
+  { path: "/orders", label: "Orders", icon: PackageCheck },
   { path: "/featured", label: "Featured Pieces", icon: Sparkles },
   { path: "/hot-selling", label: "Hot Selling", icon: Star },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
 async function loadAdminData(token: string) {
-  const [categoriesResponse, productsResponse, featuredResponse, hotSellingResponse, settingsResponse] = await Promise.all([
+  const [categoriesResponse, productsResponse, ordersResponse, featuredResponse, hotSellingResponse, settingsResponse] = await Promise.all([
     adminApi.getCategories(token),
     adminApi.getProducts(token),
+    adminApi.getOrders(token),
     adminApi.getFeatured(token),
     adminApi.getHotSelling(token),
     adminApi.getSettings(token),
@@ -31,6 +34,7 @@ async function loadAdminData(token: string) {
   return {
     categories: categoriesResponse.items,
     products: productsResponse.items,
+    orders: ordersResponse.items,
     featured: featuredResponse.items,
     hotSelling: hotSellingResponse.items,
     settings: settingsResponse,
@@ -57,6 +61,7 @@ function App() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [featured, setFeatured] = useState<FeaturedItem[]>([]);
   const [hotSelling, setHotSelling] = useState<HotSellingItem[]>([]);
   const [settings, setSettings] = useState<SiteSettings>(emptySiteSettings);
@@ -94,6 +99,7 @@ function App() {
         setUser(currentUser);
         setCategories(data.categories);
         setProducts(data.products);
+        setOrders(data.orders);
         setFeatured(data.featured);
         setHotSelling(data.hotSelling);
         setSettings(data.settings);
@@ -124,10 +130,11 @@ function App() {
     () => ({
       categories: categories.length,
       products: products.length,
+      orders: orders.length,
       featured: featured.length,
       hotSelling: hotSelling.length,
     }),
-    [categories.length, products.length, featured.length, hotSelling.length],
+    [categories.length, products.length, orders.length, featured.length, hotSelling.length],
   );
 
   const isAuthenticated = Boolean(token && user);
@@ -160,6 +167,7 @@ function App() {
     setUser(null);
     setCategories([]);
     setProducts([]);
+    setOrders([]);
     setFeatured([]);
     setHotSelling([]);
     setSettings(emptySiteSettings);
@@ -176,6 +184,7 @@ function App() {
 
     setCategories(refreshedData.categories);
     setProducts(refreshedData.products);
+    setOrders(refreshedData.orders);
     setFeatured(refreshedData.featured);
     setHotSelling(refreshedData.hotSelling);
     setSettings(refreshedData.settings);
@@ -189,6 +198,7 @@ function App() {
     const refreshedData = await loadAdminData(authToken);
     setCategories(refreshedData.categories);
     setProducts(refreshedData.products);
+    setOrders(refreshedData.orders);
     setFeatured(refreshedData.featured);
     setHotSelling(refreshedData.hotSelling);
     setSettings(refreshedData.settings);
@@ -222,6 +232,25 @@ function App() {
     const authToken = requireToken();
     const savedSettings = await adminApi.updateSettings(authToken, payload);
     setSettings(savedSettings);
+  };
+
+  const handleUpdateOrderStatus = async (id: string, status: OrderStatus) => {
+    const authToken = requireToken();
+    const updatedOrder = await adminApi.updateOrderStatus(authToken, id, status);
+    setOrders((current) => current.map((order) => (order.id === id ? updatedOrder : order)));
+  };
+
+  const handleDownloadOrderPdf = async (id: string) => {
+    const authToken = requireToken();
+    const blob = await adminApi.downloadOrderPdf(authToken, id);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `order-${id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   if (isAuthLoading) {
@@ -261,6 +290,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage summary={summary} />} />
                   <Route path="/categories" element={<CategoriesPage categories={categoriesWithProducts} onSave={handleSaveCategory} onDelete={handleDeleteCategory} />} />
+                  <Route path="/orders" element={<OrdersPage orders={orders} onStatusChange={handleUpdateOrderStatus} onDownloadPdf={handleDownloadOrderPdf} />} />
                   <Route path="/products" element={<Navigate to="/categories" replace />} />
                   <Route path="/featured" element={<FeaturedPage featured={featured} onCreate={handleCreateFeatured} onDelete={handleDeleteFeatured} />} />
                   <Route path="/hot-selling" element={<HotSellingPage hotSelling={hotSelling} categories={categories} onCreate={handleCreateHotSelling} onDelete={handleDeleteHotSelling} />} />

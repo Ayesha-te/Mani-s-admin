@@ -12,7 +12,7 @@ export function AdminLayout({
 }: {
   children: ReactNode;
   navItems: Array<{ path: string; label: string; icon: LucideIcon }>;
-  summary: { categories: number; products: number; featured: number; hotSelling: number };
+  summary: { categories: number; products: number; orders: number; featured: number; hotSelling: number };
   user: AdminUser | null;
   onLogout: () => void;
 }) {
@@ -57,6 +57,10 @@ export function AdminLayout({
             <div>
               <p className="summary-value">{summary.products}</p>
               <p className="summary-text">Designs</p>
+            </div>
+            <div>
+              <p className="summary-value">{summary.orders}</p>
+              <p className="summary-text">Orders</p>
             </div>
             <div>
               <p className="summary-value">{summary.featured}</p>

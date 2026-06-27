@@ -10,6 +10,8 @@ export type CategoryDesign = {
   images?: DesignImage[];
   colors?: string[];
   price: number;
+  basePrice?: number;
+  deliveryCharge?: number;
   description?: string;
   featured: boolean;
   hotSelling: boolean;
@@ -56,6 +58,37 @@ export type SiteSettings = {
   email: string;
   address: string;
   storeHours: string;
+  defaultDeliveryCharge: number;
+};
+
+export type OrderStatus = "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
+
+export type Order = {
+  id: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    notes?: string;
+  };
+  items: Array<{
+    productId?: string;
+    productName: string;
+    color?: string;
+    quantity: number;
+    unitPrice: number;
+    basePrice?: number;
+    deliveryCharge: number;
+    image?: string;
+  }>;
+  paymentMethod: "COD";
+  status: OrderStatus;
+  subtotal: number;
+  deliveryTotal: number;
+  total: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AdminUser = {
@@ -75,4 +108,5 @@ export const emptySiteSettings: SiteSettings = {
   email: "",
   address: "",
   storeHours: "",
+  defaultDeliveryCharge: 0,
 };

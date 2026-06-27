@@ -79,6 +79,11 @@ export function SettingsPage({
               Store hours
               <input className="input" value={form.storeHours} onChange={(event) => setForm((current) => ({ ...current, storeHours: event.target.value }))} required />
             </label>
+            <label>
+              Default delivery charge
+              <input className="input" type="number" min={0} value={form.defaultDeliveryCharge ?? 0} onChange={(event) => setForm((current) => ({ ...current, defaultDeliveryCharge: Number(event.target.value) }))} />
+              <small className="section-subtitle">Used once per order when designs do not have their own delivery charge.</small>
+            </label>
           </div>
 
           {error ? <p className="error-text">{error}</p> : null}

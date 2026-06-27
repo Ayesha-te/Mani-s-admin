@@ -55,6 +55,8 @@ function createEmptyDesign(): CategoryDesign {
     images: [],
     colors: [],
     price: 0,
+    basePrice: 0,
+    deliveryCharge: 0,
     description: "",
     featured: false,
     hotSelling: false,
@@ -119,6 +121,8 @@ export function CategoriesPage({
           image: normalizedProduct.images?.[0]?.url || normalizedProduct.image?.trim() || "",
           images: normalizedProduct.images ?? [],
           colors: dedupeStrings([...(normalizedProduct.colors ?? []), ...(normalizedProduct.images ?? []).map((image) => image.color ?? "")]),
+          basePrice: Math.max(0, Number(normalizedProduct.basePrice || 0)),
+          deliveryCharge: Math.max(0, Number(normalizedProduct.deliveryCharge || 0)),
           description: normalizedProduct.description?.trim() || "",
           position: index,
         };
@@ -502,6 +506,9 @@ export function CategoriesPage({
                   const colorOptions = dedupeStrings(colorInputs);
                   const imageCount = (normalizedProduct.images ?? []).length;
                   const designHeading = product.title?.trim() || `Untitled design ${index + 1}`;
+                  const discountPercent = normalizedProduct.basePrice && normalizedProduct.basePrice > normalizedProduct.price
+                    ? Math.round(((normalizedProduct.basePrice - normalizedProduct.price) / normalizedProduct.basePrice) * 100)
+                    : 0;
 
                   return (
                     <div key={product.id ?? `design-${index}`} className="design-editor card padding-lg">
@@ -518,6 +525,9 @@ export function CategoriesPage({
                           ) : null}
                           {colorOptions.length > 0 ? (
                             <span className="badge design-badge-muted">{colorOptions.length} color{colorOptions.length === 1 ? "" : "s"}</span>
+                          ) : null}
+                          {discountPercent > 0 ? (
+                            <span className="badge">{discountPercent}% off</span>
                           ) : null}
                           <button className="button secondary button-compact" type="button" onClick={() => handleRemoveDesign(index)}>
                             <Trash2 />
@@ -621,8 +631,19 @@ export function CategoriesPage({
                             </label>
 
                             <label>
-                              Price
+                              Selling price
                               <input className="input" type="number" min={1} value={product.price} onChange={(event) => handleDesignChange(index, "price", Number(event.target.value))} required />
+                            </label>
+
+                            <label>
+                              Original price
+                              <input className="input" type="number" min={0} value={normalizedProduct.basePrice ?? 0} onChange={(event) => handleDesignChange(index, "basePrice", Number(event.target.value))} />
+                            </label>
+
+                            <label>
+                              Delivery charge
+                              <input className="input" type="number" min={0} value={normalizedProduct.deliveryCharge ?? 0} onChange={(event) => handleDesignChange(index, "deliveryCharge", Number(event.target.value))} />
+                              <small className="section-subtitle">Leave 0 to use the default delivery charge from Settings.</small>
                             </label>
 
                             <div className="design-summary-card">
