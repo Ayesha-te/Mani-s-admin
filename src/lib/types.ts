@@ -26,6 +26,8 @@ export type Category = {
   designs: number;
   image?: string;
   galleryImages?: string[];
+  featuredCount?: number;
+  hotSellingCount?: number;
   products?: CategoryDesign[];
 };
 

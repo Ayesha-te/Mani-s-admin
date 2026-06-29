@@ -92,10 +92,12 @@ function createLegacyDesigns(category: Category) {
 
 export function CategoriesPage({
   categories,
+  onEdit,
   onSave,
   onDelete,
 }: {
   categories: Category[];
+  onEdit: (slug: string) => Promise<Category>;
   onSave: (payload: Category, currentSlug?: string) => Promise<Category>;
   onDelete: (slug: string) => Promise<void>;
 }) {
@@ -104,6 +106,7 @@ export function CategoriesPage({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
   const isSubmitLockedRef = useRef(false);
 
@@ -168,20 +171,24 @@ export function CategoriesPage({
     }
   };
 
-  const handleEdit = (slug: string) => {
-    const category = categories.find((item) => item.slug === slug);
-    if (!category) {
-      return;
-    }
-
-    setForm({
-      name: category.name,
-      description: category.description,
-      image: category.image || "",
-      products: createLegacyDesigns(category),
-    });
-    setEditSlug(slug);
+  const handleEdit = async (slug: string) => {
     setError(null);
+    setEditingSlug(slug);
+
+    try {
+      const category = await onEdit(slug);
+      setForm({
+        name: category.name,
+        description: category.description,
+        image: category.image || "",
+        products: createLegacyDesigns(category),
+      });
+      setEditSlug(category.slug);
+    } catch (loadError) {
+      setError(getErrorMessage(loadError));
+    } finally {
+      setEditingSlug(null);
+    }
   };
 
   const handleDelete = async (slug: string) => {
@@ -778,11 +785,11 @@ export function CategoriesPage({
                     <td>{category.name}</td>
                     <td>{category.slug}</td>
                     <td>{category.products?.length ?? category.designs}</td>
-                    <td>{category.products?.filter((product) => product.featured).length ?? 0}</td>
-                    <td>{category.products?.filter((product) => product.hotSelling).length ?? 0}</td>
+                    <td>{category.featuredCount ?? category.products?.filter((product) => product.featured).length ?? 0}</td>
+                    <td>{category.hotSellingCount ?? category.products?.filter((product) => product.hotSelling).length ?? 0}</td>
                     <td>
-                      <button className="button secondary" type="button" onClick={() => handleEdit(category.slug)}>
-                        Edit
+                      <button className="button secondary" type="button" onClick={() => void handleEdit(category.slug)} disabled={editingSlug === category.slug}>
+                        {editingSlug === category.slug ? "Loading..." : "Edit"}
                       </button>
                       <button className="button secondary" type="button" onClick={() => handleDelete(category.slug)} disabled={deletingSlug === category.slug}>
                         <Trash2 />

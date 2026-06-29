@@ -1,5 +1,5 @@
-const MAX_IMAGE_DIMENSION = 1600;
-const IMAGE_QUALITY = 0.82;
+const MAX_IMAGE_DIMENSION = 1280;
+const IMAGE_QUALITY = 0.76;
 
 function readBlobAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

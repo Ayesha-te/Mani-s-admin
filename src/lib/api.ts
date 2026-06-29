@@ -91,6 +91,9 @@ export const adminApi = {
   getCategories(token: string) {
     return request<{ items: Category[] }>("/admin/categories", {}, token);
   },
+  getCategory(token: string, slug: string) {
+    return request<Category>(`/admin/categories/${slug}`, {}, token);
+  },
   createCategory(token: string, payload: Category) {
     return request<Category>("/admin/categories", {
       method: "POST",
@@ -105,9 +108,6 @@ export const adminApi = {
   },
   deleteCategory(token: string, slug: string) {
     return request<void>(`/admin/categories/${slug}`, { method: "DELETE" }, token);
-  },
-  getProducts(token: string) {
-    return request<{ items: Product[] }>("/admin/products", {}, token);
   },
   getOrders(token: string) {
     return request<{ items: Order[] }>("/admin/orders", {}, token);

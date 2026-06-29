@@ -22,9 +22,8 @@ const navItems = [
 ];
 
 async function loadAdminData(token: string) {
-  const [categoriesResponse, productsResponse, ordersResponse, featuredResponse, hotSellingResponse, settingsResponse] = await Promise.all([
+  const [categoriesResponse, ordersResponse, featuredResponse, hotSellingResponse, settingsResponse] = await Promise.all([
     adminApi.getCategories(token),
-    adminApi.getProducts(token),
     adminApi.getOrders(token),
     adminApi.getFeatured(token),
     adminApi.getHotSelling(token),
@@ -33,7 +32,6 @@ async function loadAdminData(token: string) {
 
   return {
     categories: categoriesResponse.items,
-    products: productsResponse.items,
     orders: ordersResponse.items,
     featured: featuredResponse.items,
     hotSelling: hotSellingResponse.items,
@@ -41,19 +39,54 @@ async function loadAdminData(token: string) {
   };
 }
 
-function attachProductsToCategories(categories: Category[], products: Product[]) {
-  const productsByCategory = new Map<string, Product[]>();
+async function refreshCatalogData(token: string) {
+  const [categoriesResponse, featuredResponse, hotSellingResponse] = await Promise.all([
+    adminApi.getCategories(token),
+    adminApi.getFeatured(token),
+    adminApi.getHotSelling(token),
+  ]);
 
-  for (const product of products) {
-    const existingProducts = productsByCategory.get(product.categorySlug) ?? [];
-    existingProducts.push(product);
-    productsByCategory.set(product.categorySlug, existingProducts);
-  }
+  return {
+    categories: categoriesResponse.items,
+    featured: featuredResponse.items,
+    hotSelling: hotSellingResponse.items,
+  };
+}
 
-  return categories.map((category) => ({
-    ...category,
-    products: productsByCategory.get(category.slug) ?? [],
-  }));
+function mergeDetailedCategory(categories: Category[], detailedCategory: Category) {
+  let found = false;
+  const nextCategories = categories.map((category) => {
+    if (category.slug !== detailedCategory.slug) {
+      return category;
+    }
+
+    found = true;
+    return {
+      ...category,
+      ...detailedCategory,
+    };
+  });
+
+  return found ? nextCategories : [detailedCategory, ...nextCategories];
+}
+
+async function runWithConcurrencyLimit<T>(
+  items: T[],
+  concurrency: number,
+  task: (item: T, index: number) => Promise<void>,
+) {
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        await task(items[currentIndex], currentIndex);
+      }
+    }),
+  );
 }
 
 function normalizeProductPayload(product: Product, categorySlug: string, fallbackDescription: string, position: number): Product {
@@ -99,29 +132,32 @@ async function syncCategoryProducts(
   const existingProductIds = new Set(existingProducts.map((product) => product.id).filter(Boolean));
   const submittedProductIds = new Set(submittedProducts.map((product) => product.id).filter(Boolean));
 
-  for (const [index, product] of submittedProducts.entries()) {
+  await runWithConcurrencyLimit(submittedProducts, 4, async (product, index) => {
     const normalizedProduct = normalizeProductPayload(product, categorySlug, fallbackDescription, index);
 
     if (normalizedProduct.id) {
       await adminApi.updateProduct(token, normalizedProduct.id, normalizedProduct);
-      continue;
+      return;
     }
 
     await adminApi.createProduct(token, normalizedProduct);
-  }
+  });
 
-  for (const existingProduct of existingProducts) {
-    if (existingProduct.id && existingProductIds.has(existingProduct.id) && !submittedProductIds.has(existingProduct.id)) {
-      await adminApi.deleteProduct(token, existingProduct.id);
-    }
-  }
+  const removedProducts = existingProducts.filter((existingProduct) => (
+    existingProduct.id
+    && existingProductIds.has(existingProduct.id)
+    && !submittedProductIds.has(existingProduct.id)
+  ));
+
+  await Promise.all(
+    removedProducts.map((existingProduct) => adminApi.deleteProduct(token, existingProduct.id as string)),
+  );
 }
 
 function App() {
   const [token, setToken] = useState<string | null>(() => tokenStorage.get());
   const [user, setUser] = useState<AdminUser | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [featured, setFeatured] = useState<FeaturedItem[]>([]);
   const [hotSelling, setHotSelling] = useState<HotSellingItem[]>([]);
@@ -130,11 +166,6 @@ function App() {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const categorySavePromiseRef = useRef<Promise<Category> | null>(null);
-
-  const categoriesWithProducts = useMemo(
-    () => attachProductsToCategories(categories, products),
-    [categories, products],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -160,7 +191,6 @@ function App() {
 
         setUser(currentUser);
         setCategories(data.categories);
-        setProducts(data.products);
         setOrders(data.orders);
         setFeatured(data.featured);
         setHotSelling(data.hotSelling);
@@ -174,6 +204,11 @@ function App() {
         tokenStorage.clear();
         setToken(null);
         setUser(null);
+        setCategories([]);
+        setOrders([]);
+        setFeatured([]);
+        setHotSelling([]);
+        setSettings(emptySiteSettings);
         setGlobalError(getErrorMessage(error));
       } finally {
         if (!cancelled) {
@@ -191,12 +226,12 @@ function App() {
   const summary = useMemo(
     () => ({
       categories: categories.length,
-      products: products.length,
+      products: categories.reduce((total, category) => total + Math.max(0, Number(category.designs || 0)), 0),
       orders: orders.length,
       featured: featured.length,
       hotSelling: hotSelling.length,
     }),
-    [categories.length, products.length, orders.length, featured.length, hotSelling.length],
+    [categories, orders.length, featured.length, hotSelling.length],
   );
 
   const isAuthenticated = Boolean(token && user);
@@ -228,12 +263,27 @@ function App() {
     setToken(null);
     setUser(null);
     setCategories([]);
-    setProducts([]);
     setOrders([]);
     setFeatured([]);
     setHotSelling([]);
     setSettings(emptySiteSettings);
     setGlobalError(null);
+  };
+
+  const handleLoadCategory = async (slug: string) => {
+    const authToken = requireToken();
+    const existingCategory = categories.find((item) => item.slug === slug);
+    if (!existingCategory) {
+      throw new Error("Category not found.");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(existingCategory, "products")) {
+      return existingCategory;
+    }
+
+    const detailedCategory = await adminApi.getCategory(authToken, slug);
+    setCategories((current) => mergeDetailedCategory(current, detailedCategory));
+    return detailedCategory;
   };
 
   const handleSaveCategory = async (payload: Category, currentSlug?: string) => {
@@ -243,7 +293,7 @@ function App() {
 
     const authToken = requireToken();
     const existingCategory = currentSlug
-      ? categoriesWithProducts.find((item) => item.slug === currentSlug) ?? null
+      ? categories.find((item) => item.slug === currentSlug) ?? null
       : null;
     const submittedProducts = (payload.products ?? []).map((product, index) => normalizeProductPayload({
       ...product,
@@ -273,26 +323,22 @@ function App() {
           payload.description,
         );
 
-        const refreshedData = await loadAdminData(authToken);
-        const nextCategories = attachProductsToCategories(refreshedData.categories, refreshedData.products);
+        const [refreshedCatalog, detailedCategory] = await Promise.all([
+          refreshCatalogData(authToken),
+          adminApi.getCategory(authToken, savedCategory.slug),
+        ]);
 
-        setCategories(refreshedData.categories);
-        setProducts(refreshedData.products);
-        setOrders(refreshedData.orders);
-        setFeatured(refreshedData.featured);
-        setHotSelling(refreshedData.hotSelling);
-        setSettings(refreshedData.settings);
+        setCategories(mergeDetailedCategory(refreshedCatalog.categories, detailedCategory));
+        setFeatured(refreshedCatalog.featured);
+        setHotSelling(refreshedCatalog.hotSelling);
 
-        return nextCategories.find((item) => item.slug === savedCategory.slug) ?? savedCategory;
+        return detailedCategory;
       } catch (error) {
         try {
-          const refreshedData = await loadAdminData(authToken);
-          setCategories(refreshedData.categories);
-          setProducts(refreshedData.products);
-          setOrders(refreshedData.orders);
-          setFeatured(refreshedData.featured);
-          setHotSelling(refreshedData.hotSelling);
-          setSettings(refreshedData.settings);
+          const refreshedCatalog = await refreshCatalogData(authToken);
+          setCategories(refreshedCatalog.categories);
+          setFeatured(refreshedCatalog.featured);
+          setHotSelling(refreshedCatalog.hotSelling);
         } catch {
           // Ignore refresh errors and surface the original failure.
         }
@@ -312,13 +358,10 @@ function App() {
   const handleDeleteCategory = async (slug: string) => {
     const authToken = requireToken();
     await adminApi.deleteCategory(authToken, slug);
-    const refreshedData = await loadAdminData(authToken);
-    setCategories(refreshedData.categories);
-    setProducts(refreshedData.products);
-    setOrders(refreshedData.orders);
-    setFeatured(refreshedData.featured);
-    setHotSelling(refreshedData.hotSelling);
-    setSettings(refreshedData.settings);
+    const refreshedCatalog = await refreshCatalogData(authToken);
+    setCategories(refreshedCatalog.categories);
+    setFeatured(refreshedCatalog.featured);
+    setHotSelling(refreshedCatalog.hotSelling);
   };
 
   const handleCreateFeatured = async (payload: FeaturedItem) => {
@@ -412,7 +455,7 @@ function App() {
               ) : (
                 <Routes>
                   <Route path="/" element={<DashboardPage summary={summary} />} />
-                  <Route path="/categories" element={<CategoriesPage categories={categoriesWithProducts} onSave={handleSaveCategory} onDelete={handleDeleteCategory} />} />
+                  <Route path="/categories" element={<CategoriesPage categories={categories} onEdit={handleLoadCategory} onSave={handleSaveCategory} onDelete={handleDeleteCategory} />} />
                   <Route path="/orders" element={<OrdersPage orders={orders} onStatusChange={handleUpdateOrderStatus} onDelete={handleDeleteOrder} onDownloadPdf={handleDownloadOrderPdf} />} />
                   <Route path="/products" element={<Navigate to="/categories" replace />} />
                   <Route path="/featured" element={<FeaturedPage featured={featured} onCreate={handleCreateFeatured} onDelete={handleDeleteFeatured} />} />
