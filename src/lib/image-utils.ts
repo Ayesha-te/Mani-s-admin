@@ -5,6 +5,21 @@ const MAX_IMAGE_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
 const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
 
+function readBlobAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not read file as data URL."));
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -146,19 +161,35 @@ export async function uploadImageFile(file: File): Promise<string> {
   }
 
   const optimizedFile = await optimizeImage(file);
-  const pathname = buildUploadPath(optimizedFile);
-  const multipart = optimizedFile.size >= MULTIPART_THRESHOLD_BYTES;
-  const clientToken = await requestClientUploadToken(pathname, token, multipart);
-  const result = await put(pathname, optimizedFile, {
-    access: "public",
-    token: clientToken,
-    contentType: optimizedFile.type || file.type || "image/jpeg",
-    multipart,
-  });
+  try {
+    const pathname = buildUploadPath(optimizedFile);
+    const multipart = optimizedFile.size >= MULTIPART_THRESHOLD_BYTES;
+    const clientToken = await requestClientUploadToken(pathname, token, multipart);
+    const result = await put(pathname, optimizedFile, {
+      access: "public",
+      token: clientToken,
+      contentType: optimizedFile.type || file.type || "image/jpeg",
+      multipart,
+    });
 
-  if (!result.url) {
-    throw new Error("Image upload did not return a public URL.");
+    if (!result.url) {
+      throw new Error("Image upload did not return a public URL.");
+    }
+
+    return result.url;
+  } catch (error) {
+    if (error instanceof Error) {
+      const shouldFallbackToInlineImage = error.message.includes("Blob")
+        || error.message.includes("client token")
+        || error.message.includes("status 404")
+        || error.message.includes("status 500")
+        || error.message.includes("status 503");
+
+      if (!shouldFallbackToInlineImage) {
+        throw error;
+      }
+    }
+
+    return readBlobAsDataUrl(optimizedFile);
   }
-
-  return result.url;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ImagePlus, Plus, Trash2 } from "lucide-react";
 import { uploadImageFile } from "@/lib/image-utils";
 import { getErrorMessage } from "@/lib/api";
@@ -105,9 +105,16 @@ export function CategoriesPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
+  const isSubmitLockedRef = useRef(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isSubmitLockedRef.current || isUploadingImages) {
+      return;
+    }
+
+    isSubmitLockedRef.current = true;
     setError(null);
     setIsSubmitting(true);
 
@@ -156,6 +163,7 @@ export function CategoriesPage({
     } catch (submissionError) {
       setError(getErrorMessage(submissionError));
     } finally {
+      isSubmitLockedRef.current = false;
       setIsSubmitting(false);
     }
   };

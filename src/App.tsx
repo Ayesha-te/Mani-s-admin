@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Home, List, PackageCheck, Settings, Sparkles, Star } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -129,6 +129,7 @@ function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(Boolean(token));
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const categorySavePromiseRef = useRef<Promise<Category> | null>(null);
 
   const categoriesWithProducts = useMemo(
     () => attachProductsToCategories(categories, products),
@@ -236,6 +237,10 @@ function App() {
   };
 
   const handleSaveCategory = async (payload: Category, currentSlug?: string) => {
+    if (categorySavePromiseRef.current) {
+      return categorySavePromiseRef.current;
+    }
+
     const authToken = requireToken();
     const existingCategory = currentSlug
       ? categoriesWithProducts.find((item) => item.slug === currentSlug) ?? null
@@ -254,45 +259,54 @@ function App() {
       galleryImages: [],
     };
 
-    try {
-      const savedCategory = currentSlug
-        ? await adminApi.updateCategory(authToken, currentSlug, categoryPayload)
-        : await adminApi.createCategory(authToken, categoryPayload);
-
-      await syncCategoryProducts(
-        authToken,
-        existingCategory?.products ?? [],
-        submittedProducts,
-        savedCategory.slug,
-        payload.description,
-      );
-
-      const refreshedData = await loadAdminData(authToken);
-      const nextCategories = attachProductsToCategories(refreshedData.categories, refreshedData.products);
-
-      setCategories(refreshedData.categories);
-      setProducts(refreshedData.products);
-      setOrders(refreshedData.orders);
-      setFeatured(refreshedData.featured);
-      setHotSelling(refreshedData.hotSelling);
-      setSettings(refreshedData.settings);
-
-      return nextCategories.find((item) => item.slug === savedCategory.slug) ?? savedCategory;
-    } catch (error) {
+    const savePromise = (async () => {
       try {
+        const savedCategory = currentSlug
+          ? await adminApi.updateCategory(authToken, currentSlug, categoryPayload)
+          : await adminApi.createCategory(authToken, categoryPayload);
+
+        await syncCategoryProducts(
+          authToken,
+          existingCategory?.products ?? [],
+          submittedProducts,
+          savedCategory.slug,
+          payload.description,
+        );
+
         const refreshedData = await loadAdminData(authToken);
+        const nextCategories = attachProductsToCategories(refreshedData.categories, refreshedData.products);
+
         setCategories(refreshedData.categories);
         setProducts(refreshedData.products);
         setOrders(refreshedData.orders);
         setFeatured(refreshedData.featured);
         setHotSelling(refreshedData.hotSelling);
         setSettings(refreshedData.settings);
-      } catch {
-        // Ignore refresh errors and surface the original failure.
-      }
 
-      throw error;
-    }
+        return nextCategories.find((item) => item.slug === savedCategory.slug) ?? savedCategory;
+      } catch (error) {
+        try {
+          const refreshedData = await loadAdminData(authToken);
+          setCategories(refreshedData.categories);
+          setProducts(refreshedData.products);
+          setOrders(refreshedData.orders);
+          setFeatured(refreshedData.featured);
+          setHotSelling(refreshedData.hotSelling);
+          setSettings(refreshedData.settings);
+        } catch {
+          // Ignore refresh errors and surface the original failure.
+        }
+
+        throw error;
+      } finally {
+        if (categorySavePromiseRef.current === savePromise) {
+          categorySavePromiseRef.current = null;
+        }
+      }
+    })();
+
+    categorySavePromiseRef.current = savePromise;
+    return savePromise;
   };
 
   const handleDeleteCategory = async (slug: string) => {
