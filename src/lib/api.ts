@@ -130,6 +130,12 @@ export const adminApi = {
       body: JSON.stringify(payload),
     }, token);
   },
+  updateProduct(token: string, id: string, payload: Product) {
+    return request<Product>(`/admin/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }, token);
+  },
   deleteProduct(token: string, id: string) {
     return request<void>(`/admin/products/${id}`, { method: "DELETE" }, token);
   },

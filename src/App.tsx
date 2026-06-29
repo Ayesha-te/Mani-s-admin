@@ -56,6 +56,67 @@ function attachProductsToCategories(categories: Category[], products: Product[])
   }));
 }
 
+function normalizeProductPayload(product: Product, categorySlug: string, fallbackDescription: string, position: number): Product {
+  const images = (product.images ?? [])
+    .map((image) => ({
+      url: image.url?.trim() || "",
+      color: image.color?.trim() || "",
+    }))
+    .filter((image) => image.url);
+  const image = images[0]?.url || product.image?.trim() || "";
+  const colors = Array.from(
+    new Set(
+      [...(product.colors ?? []), ...images.map((imageItem) => imageItem.color ?? "")]
+        .map((color) => color.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  return {
+    ...product,
+    title: product.title.trim(),
+    categorySlug,
+    image,
+    images,
+    colors,
+    price: Number(product.price),
+    basePrice: Math.max(0, Number(product.basePrice || 0)),
+    deliveryCharge: Math.max(0, Number(product.deliveryCharge || 0)),
+    description: product.description?.trim() || fallbackDescription,
+    featured: Boolean(product.featured),
+    hotSelling: Boolean(product.hotSelling),
+    position,
+  };
+}
+
+async function syncCategoryProducts(
+  token: string,
+  existingProducts: Product[],
+  submittedProducts: Product[],
+  categorySlug: string,
+  fallbackDescription: string,
+) {
+  const existingProductIds = new Set(existingProducts.map((product) => product.id).filter(Boolean));
+  const submittedProductIds = new Set(submittedProducts.map((product) => product.id).filter(Boolean));
+
+  for (const [index, product] of submittedProducts.entries()) {
+    const normalizedProduct = normalizeProductPayload(product, categorySlug, fallbackDescription, index);
+
+    if (normalizedProduct.id) {
+      await adminApi.updateProduct(token, normalizedProduct.id, normalizedProduct);
+      continue;
+    }
+
+    await adminApi.createProduct(token, normalizedProduct);
+  }
+
+  for (const existingProduct of existingProducts) {
+    if (existingProduct.id && existingProductIds.has(existingProduct.id) && !submittedProductIds.has(existingProduct.id)) {
+      await adminApi.deleteProduct(token, existingProduct.id);
+    }
+  }
+}
+
 function App() {
   const [token, setToken] = useState<string | null>(() => tokenStorage.get());
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -176,20 +237,62 @@ function App() {
 
   const handleSaveCategory = async (payload: Category, currentSlug?: string) => {
     const authToken = requireToken();
-    const savedCategory = currentSlug
-      ? await adminApi.updateCategory(authToken, currentSlug, payload)
-      : await adminApi.createCategory(authToken, payload);
-    const refreshedData = await loadAdminData(authToken);
-    const nextCategories = attachProductsToCategories(refreshedData.categories, refreshedData.products);
+    const existingCategory = currentSlug
+      ? categoriesWithProducts.find((item) => item.slug === currentSlug) ?? null
+      : null;
+    const submittedProducts = (payload.products ?? []).map((product, index) => normalizeProductPayload({
+      ...product,
+      categorySlug: currentSlug || payload.slug,
+      description: product.description || payload.description,
+    }, currentSlug || payload.slug, payload.description, index));
+    const categoryPayload: Category = {
+      name: payload.name,
+      slug: payload.slug,
+      description: payload.description,
+      designs: submittedProducts.length,
+      image: payload.image || submittedProducts[0]?.image || "",
+      galleryImages: [],
+    };
 
-    setCategories(refreshedData.categories);
-    setProducts(refreshedData.products);
-    setOrders(refreshedData.orders);
-    setFeatured(refreshedData.featured);
-    setHotSelling(refreshedData.hotSelling);
-    setSettings(refreshedData.settings);
+    try {
+      const savedCategory = currentSlug
+        ? await adminApi.updateCategory(authToken, currentSlug, categoryPayload)
+        : await adminApi.createCategory(authToken, categoryPayload);
 
-    return nextCategories.find((item) => item.slug === savedCategory.slug) ?? savedCategory;
+      await syncCategoryProducts(
+        authToken,
+        existingCategory?.products ?? [],
+        submittedProducts,
+        savedCategory.slug,
+        payload.description,
+      );
+
+      const refreshedData = await loadAdminData(authToken);
+      const nextCategories = attachProductsToCategories(refreshedData.categories, refreshedData.products);
+
+      setCategories(refreshedData.categories);
+      setProducts(refreshedData.products);
+      setOrders(refreshedData.orders);
+      setFeatured(refreshedData.featured);
+      setHotSelling(refreshedData.hotSelling);
+      setSettings(refreshedData.settings);
+
+      return nextCategories.find((item) => item.slug === savedCategory.slug) ?? savedCategory;
+    } catch (error) {
+      try {
+        const refreshedData = await loadAdminData(authToken);
+        setCategories(refreshedData.categories);
+        setProducts(refreshedData.products);
+        setOrders(refreshedData.orders);
+        setFeatured(refreshedData.featured);
+        setHotSelling(refreshedData.hotSelling);
+        setSettings(refreshedData.settings);
+      } catch {
+        // Ignore refresh errors and surface the original failure.
+      }
+
+      throw error;
+    }
   };
 
   const handleDeleteCategory = async (slug: string) => {
