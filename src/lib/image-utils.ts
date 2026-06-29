@@ -1,9 +1,5 @@
-import { put } from "@vercel/blob/client";
-import { API_BASE_URL, tokenStorage } from "@/lib/api";
-
 const MAX_IMAGE_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
-const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
 
 function readBlobAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -91,105 +87,7 @@ async function optimizeImage(file: File) {
   });
 }
 
-function sanitizeFilename(name: string) {
-  const extensionIndex = name.lastIndexOf(".");
-  const rawBaseName = extensionIndex >= 0 ? name.slice(0, extensionIndex) : name;
-  const rawExtension = extensionIndex >= 0 ? name.slice(extensionIndex).toLowerCase() : "";
-  const safeBaseName = rawBaseName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "image";
-  const safeExtension = rawExtension.replace(/[^a-z0-9.]/g, "") || ".jpg";
-
-  return `${safeBaseName}${safeExtension}`;
-}
-
-function buildUploadPath(file: File) {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = `${now.getUTCMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getUTCDate()}`.padStart(2, "0");
-  return `admin-uploads/${year}/${month}/${day}/${sanitizeFilename(file.name)}`;
-}
-
-async function requestClientUploadToken(pathname: string, authToken: string, multipart: boolean) {
-  const response = await fetch(`${API_BASE_URL}/admin/uploads`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({
-      type: "blob.generate-client-token",
-      payload: {
-        pathname,
-        clientPayload: null,
-        multipart,
-      },
-    }),
-  });
-
-  const text = await response.text();
-  let payload: { clientToken?: string; message?: string } = {};
-
-  if (text) {
-    try {
-      payload = JSON.parse(text) as typeof payload;
-    } catch {
-      if (!response.ok) {
-        throw new Error(text);
-      }
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(payload.message || `Image upload token request failed with status ${response.status}.`);
-  }
-
-  if (!payload.clientToken) {
-    throw new Error("Image upload token response was missing a client token.");
-  }
-
-  return payload.clientToken;
-}
-
 export async function uploadImageFile(file: File): Promise<string> {
-  const token = tokenStorage.get();
-  if (!token) {
-    throw new Error("You are signed out. Please log in again.");
-  }
-
   const optimizedFile = await optimizeImage(file);
-  try {
-    const pathname = buildUploadPath(optimizedFile);
-    const multipart = optimizedFile.size >= MULTIPART_THRESHOLD_BYTES;
-    const clientToken = await requestClientUploadToken(pathname, token, multipart);
-    const result = await put(pathname, optimizedFile, {
-      access: "public",
-      token: clientToken,
-      contentType: optimizedFile.type || file.type || "image/jpeg",
-      multipart,
-    });
-
-    if (!result.url) {
-      throw new Error("Image upload did not return a public URL.");
-    }
-
-    return result.url;
-  } catch (error) {
-    if (error instanceof Error) {
-      const shouldFallbackToInlineImage = error.message.includes("Blob")
-        || error.message.includes("client token")
-        || error.message.includes("status 404")
-        || error.message.includes("status 500")
-        || error.message.includes("status 503");
-
-      if (!shouldFallbackToInlineImage) {
-        throw error;
-      }
-    }
-
-    return readBlobAsDataUrl(optimizedFile);
-  }
+  return readBlobAsDataUrl(optimizedFile);
 }
