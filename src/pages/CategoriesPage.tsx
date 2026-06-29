@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ImagePlus, Plus, Trash2 } from "lucide-react";
-import { fileToDataUrl } from "@/lib/image-utils";
+import { uploadImageFile } from "@/lib/image-utils";
 import { getErrorMessage } from "@/lib/api";
 import type { Category, CategoryDesign } from "@/lib/types";
 
@@ -205,7 +205,7 @@ export function CategoriesPage({
     setIsUploadingImages(true);
 
     try {
-      const image = await fileToDataUrl(file);
+      const image = await uploadImageFile(file);
       setForm((current) => ({
         ...current,
         image,
@@ -228,7 +228,7 @@ export function CategoriesPage({
     try {
       const newDesigns = await Promise.all(
         Array.from(files).map(async (file) => {
-          const image = await fileToDataUrl(file);
+          const image = await uploadImageFile(file);
 
           return {
             ...createEmptyDesign(),
@@ -267,7 +267,7 @@ export function CategoriesPage({
     try {
       const uploadedImages = await Promise.all(
         Array.from(files).map(async (file) => ({
-          url: await fileToDataUrl(file),
+          url: await uploadImageFile(file),
           color: "",
         })),
       );
@@ -304,7 +304,7 @@ export function CategoriesPage({
     setIsUploadingImages(true);
 
     try {
-      const uploadedImage = await fileToDataUrl(file);
+      const uploadedImage = await uploadImageFile(file);
       setForm((current) => ({
         ...current,
         products: current.products.map((product, productIndex) => {

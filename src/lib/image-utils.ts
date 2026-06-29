@@ -1,20 +1,9 @@
+import { upload } from "@vercel/blob/client";
+import { API_BASE_URL, tokenStorage } from "@/lib/api";
+
 const MAX_IMAGE_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
-
-function readBlobAsDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Could not read file as data URL."));
-      }
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
+const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
 
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -81,14 +70,54 @@ async function optimizeImage(file: File) {
     return file;
   }
 
-  return optimizedBlob;
+  return new File([optimizedBlob], file.name, {
+    type: optimizedBlob.type || file.type || "image/jpeg",
+    lastModified: file.lastModified,
+  });
 }
 
-export async function fileToDataUrl(file: File): Promise<string> {
-  try {
-    const optimizedFile = await optimizeImage(file);
-    return await readBlobAsDataUrl(optimizedFile);
-  } catch {
-    return readBlobAsDataUrl(file);
+function sanitizeFilename(name: string) {
+  const extensionIndex = name.lastIndexOf(".");
+  const rawBaseName = extensionIndex >= 0 ? name.slice(0, extensionIndex) : name;
+  const rawExtension = extensionIndex >= 0 ? name.slice(extensionIndex).toLowerCase() : "";
+  const safeBaseName = rawBaseName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "image";
+  const safeExtension = rawExtension.replace(/[^a-z0-9.]/g, "") || ".jpg";
+
+  return `${safeBaseName}${safeExtension}`;
+}
+
+function buildUploadPath(file: File) {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = `${now.getUTCMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getUTCDate()}`.padStart(2, "0");
+  return `admin-uploads/${year}/${month}/${day}/${sanitizeFilename(file.name)}`;
+}
+
+export async function uploadImageFile(file: File): Promise<string> {
+  const token = tokenStorage.get();
+  if (!token) {
+    throw new Error("You are signed out. Please log in again.");
   }
+
+  const optimizedFile = await optimizeImage(file);
+  const result = await upload(buildUploadPath(optimizedFile), optimizedFile, {
+    access: "public",
+    contentType: optimizedFile.type || file.type || "image/jpeg",
+    handleUploadUrl: `${API_BASE_URL}/admin/uploads`,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    multipart: optimizedFile.size >= MULTIPART_THRESHOLD_BYTES,
+  });
+
+  if (!result.url) {
+    throw new Error("Image upload did not return a public URL.");
+  }
+
+  return result.url;
 }

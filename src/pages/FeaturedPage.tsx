@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { fileToDataUrl } from "@/lib/image-utils";
+import { uploadImageFile } from "@/lib/image-utils";
 import { getErrorMessage } from "@/lib/api";
 import type { FeaturedItem } from "@/lib/types";
 
@@ -24,7 +24,7 @@ export function FeaturedPage({
     setIsSubmitting(true);
 
     try {
-      const imageData = form.imageFile ? await fileToDataUrl(form.imageFile) : form.image;
+      const imageData = form.imageFile ? await uploadImageFile(form.imageFile) : form.image;
       await onCreate({
         title: form.title,
         image: imageData,
