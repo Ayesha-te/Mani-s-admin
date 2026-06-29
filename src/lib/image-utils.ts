@@ -1,4 +1,4 @@
-import { upload } from "@vercel/blob/client";
+import { put } from "@vercel/blob/client";
 import { API_BASE_URL, tokenStorage } from "@/lib/api";
 
 const MAX_IMAGE_DIMENSION = 1600;
@@ -98,6 +98,47 @@ function buildUploadPath(file: File) {
   return `admin-uploads/${year}/${month}/${day}/${sanitizeFilename(file.name)}`;
 }
 
+async function requestClientUploadToken(pathname: string, authToken: string, multipart: boolean) {
+  const response = await fetch(`${API_BASE_URL}/admin/uploads`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      type: "blob.generate-client-token",
+      payload: {
+        pathname,
+        clientPayload: null,
+        multipart,
+      },
+    }),
+  });
+
+  const text = await response.text();
+  let payload: { clientToken?: string; message?: string } = {};
+
+  if (text) {
+    try {
+      payload = JSON.parse(text) as typeof payload;
+    } catch {
+      if (!response.ok) {
+        throw new Error(text);
+      }
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.message || `Image upload token request failed with status ${response.status}.`);
+  }
+
+  if (!payload.clientToken) {
+    throw new Error("Image upload token response was missing a client token.");
+  }
+
+  return payload.clientToken;
+}
+
 export async function uploadImageFile(file: File): Promise<string> {
   const token = tokenStorage.get();
   if (!token) {
@@ -105,14 +146,14 @@ export async function uploadImageFile(file: File): Promise<string> {
   }
 
   const optimizedFile = await optimizeImage(file);
-  const result = await upload(buildUploadPath(optimizedFile), optimizedFile, {
+  const pathname = buildUploadPath(optimizedFile);
+  const multipart = optimizedFile.size >= MULTIPART_THRESHOLD_BYTES;
+  const clientToken = await requestClientUploadToken(pathname, token, multipart);
+  const result = await put(pathname, optimizedFile, {
     access: "public",
+    token: clientToken,
     contentType: optimizedFile.type || file.type || "image/jpeg",
-    handleUploadUrl: `${API_BASE_URL}/admin/uploads`,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    multipart: optimizedFile.size >= MULTIPART_THRESHOLD_BYTES,
+    multipart,
   });
 
   if (!result.url) {
