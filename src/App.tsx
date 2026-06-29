@@ -240,6 +240,12 @@ function App() {
     setOrders((current) => current.map((order) => (order.id === id ? updatedOrder : order)));
   };
 
+  const handleDeleteOrder = async (id: string) => {
+    const authToken = requireToken();
+    await adminApi.deleteOrder(authToken, id);
+    setOrders((current) => current.filter((order) => order.id !== id));
+  };
+
   const handleDownloadOrderPdf = async (id: string) => {
     const authToken = requireToken();
     const blob = await adminApi.downloadOrderPdf(authToken, id);
@@ -290,7 +296,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage summary={summary} />} />
                   <Route path="/categories" element={<CategoriesPage categories={categoriesWithProducts} onSave={handleSaveCategory} onDelete={handleDeleteCategory} />} />
-                  <Route path="/orders" element={<OrdersPage orders={orders} onStatusChange={handleUpdateOrderStatus} onDownloadPdf={handleDownloadOrderPdf} />} />
+                  <Route path="/orders" element={<OrdersPage orders={orders} onStatusChange={handleUpdateOrderStatus} onDelete={handleDeleteOrder} onDownloadPdf={handleDownloadOrderPdf} />} />
                   <Route path="/products" element={<Navigate to="/categories" replace />} />
                   <Route path="/featured" element={<FeaturedPage featured={featured} onCreate={handleCreateFeatured} onDelete={handleDeleteFeatured} />} />
                   <Route path="/hot-selling" element={<HotSellingPage hotSelling={hotSelling} categories={categories} onCreate={handleCreateHotSelling} onDelete={handleDeleteHotSelling} />} />

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import { getErrorMessage } from "@/lib/api";
 import type { Order, OrderStatus } from "@/lib/types";
 
@@ -19,10 +19,12 @@ function formatDate(value: string) {
 export function OrdersPage({
   orders,
   onStatusChange,
+  onDelete,
   onDownloadPdf,
 }: {
   orders: Order[];
   onStatusChange: (id: string, status: OrderStatus) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   onDownloadPdf: (id: string) => Promise<void>;
 }) {
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
@@ -49,6 +51,23 @@ export function OrdersPage({
       await onDownloadPdf(order.id);
     } catch (downloadError) {
       setError(getErrorMessage(downloadError));
+    } finally {
+      setBusyOrderId(null);
+    }
+  };
+
+  const handleDelete = async (order: Order) => {
+    if (!window.confirm(`Delete order ${order.id.slice(-8).toUpperCase()} permanently?`)) {
+      return;
+    }
+
+    setError(null);
+    setBusyOrderId(order.id);
+
+    try {
+      await onDelete(order.id);
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError));
     } finally {
       setBusyOrderId(null);
     }
@@ -89,6 +108,10 @@ export function OrdersPage({
                     <button className="button secondary" type="button" disabled={busyOrderId === order.id} onClick={() => void handleDownload(order)}>
                       <Download className="nav-icon" />
                       PDF
+                    </button>
+                    <button className="button danger" type="button" disabled={busyOrderId === order.id} onClick={() => void handleDelete(order)}>
+                      <Trash2 className="nav-icon" />
+                      Delete
                     </button>
                   </div>
                 </div>

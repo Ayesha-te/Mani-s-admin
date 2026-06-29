@@ -118,6 +118,9 @@ export const adminApi = {
       body: JSON.stringify({ status }),
     }, token);
   },
+  deleteOrder(token: string, id: string) {
+    return request<void>(`/admin/orders/${id}`, { method: "DELETE" }, token);
+  },
   downloadOrderPdf(token: string, id: string) {
     return requestBlob(`/admin/orders/${id}/pdf`, token);
   },
